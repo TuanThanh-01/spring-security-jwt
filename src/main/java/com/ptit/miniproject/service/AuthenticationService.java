@@ -4,14 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ptit.miniproject.data.request.AuthenticationRequest;
 import com.ptit.miniproject.data.request.RegisterRequest;
 import com.ptit.miniproject.data.response.AuthenticationResponse;
-import com.ptit.miniproject.entity.Role;
-import com.ptit.miniproject.entity.Token;
-import com.ptit.miniproject.entity.TokenType;
-import com.ptit.miniproject.entity.User;
+import com.ptit.miniproject.entity.*;
+import com.ptit.miniproject.repository.ConfirmationTokenRepository;
 import com.ptit.miniproject.repository.TokenRepository;
 import com.ptit.miniproject.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
+import org.springframework.mail.SimpleMailMessage;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -28,26 +27,45 @@ public class AuthenticationService {
 
     private final UserRepository userRepository;
     private final TokenRepository tokenRepository;
+    private final ConfirmationTokenRepository confirmTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final EmailSenderService emailService;
     private final AuthenticationManager authenticationManager;
 
-    public AuthenticationResponse register(RegisterRequest registerRequest) {
+    public String register(RegisterRequest registerRequest) {
         User user = User.builder()
                 .firstname(registerRequest.getFirstname())
                 .lastname(registerRequest.getLastname())
                 .email(registerRequest.getEmail())
                 .password(passwordEncoder.encode(registerRequest.getPassword()))
-                .role(Role.ADMIN)
+                .role(Role.USER)
+                .enabled(false)
                 .build();
         User savedUser = userRepository.save(user);
-        String jwtToken = jwtService.generateToken(savedUser);
-        String refreshToken = jwtService.generateRefreshToken(savedUser);
-        saveUserToken(user, jwtToken);
-        return AuthenticationResponse.builder()
-                .accessToken(jwtToken)
-                .refreshToken(refreshToken)
-                .build();
+
+        ConfirmationToken confirmationToken = new ConfirmationToken(savedUser);
+        confirmTokenRepository.save(confirmationToken);
+        EmailDetails emailDetails = new EmailDetails();
+        emailDetails.setRecipient(savedUser.getEmail());
+        emailDetails.setSubject("Complete Registration!");
+        emailDetails.setMsgBody("Hi, " + user.getFirstname() + " " + user.getLastname()
+        + "\nTo confirm your account, please click here to verify your account: " +
+                "http://localhost:8082/api/v1/auth/confirm-account?token=" + confirmationToken.getToken());
+        emailService.sendEmail(emailDetails);
+        return "Verify email by the link sent on your email address";
+    }
+
+    public String confirmEmail(String confirmToken) {
+        ConfirmationToken token = confirmTokenRepository.findByToken(confirmToken);
+        if(token != null) {
+            User user = userRepository.findByEmail(token.getUser().getEmail())
+                    .orElseThrow();
+            user.setEnabled(true);
+            userRepository.save(user);
+            return "Email verified successfully!";
+        }
+        return "Couldn't verify email";
     }
 
     public AuthenticationResponse authenticate(AuthenticationRequest authenticationRequest) {

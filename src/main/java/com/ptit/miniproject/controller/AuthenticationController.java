@@ -7,10 +7,7 @@ import com.ptit.miniproject.service.AuthenticationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -24,11 +21,17 @@ public class AuthenticationController {
     private final AuthenticationService authenticationService;
 
     @PostMapping("/register")
-    public ResponseEntity<AuthenticationResponse> register(
+    public ResponseEntity<String> register(
             @RequestBody RegisterRequest registerRequest
             ) {
         return ResponseEntity.status(HttpStatus.OK)
                 .body(authenticationService.register(registerRequest));
+    }
+
+    @RequestMapping(value = "/confirm-account", method = {RequestMethod.GET, RequestMethod.POST})
+    public ResponseEntity<String> confirmUserAccount(@RequestParam("token")String confirmToken) {
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(authenticationService.confirmEmail(confirmToken));
     }
 
     @PostMapping("/authenticate")
